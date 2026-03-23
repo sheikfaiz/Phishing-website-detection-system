@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>PhishGuard — URL Safety Detector</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* =========================================
+       CSS VARIABLES & RESET
+    ========================================= */
+    :root {
+      --bg:          #0b0f1a;
+      --surface:     #111827;
+      --surface2:    #1a2236;
+      --border:      #1f2d45;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --accent:      #38bdf8;
+      --safe:        #22c55e;
+      --warn:        #f59e0b;
+      --danger:      #ef4444;
+      --safe-bg:     rgba(34,197,94,0.08);
+      --warn-bg:     rgba(245,158,11,0.08);
+      --danger-bg:   rgba(239,68,68,0.08);
+      --radius:      14px;
+      --mono:        'JetBrains Mono', monospace;
+      --sans:        'Syne', sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glow orb */
+    body::after {
+      content: '';
+      position: fixed;
+      width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(56,189,248,0.06) 0%, transparent 70%);
+      top: -200px; left: 50%; transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* =========================================
+       HEADER
+    ========================================= */
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      position: relative; z-index: 1;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 1.2rem;
+    }
+
+    .logo-badge::before {
+      content: '';
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #e2e8f0 30%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.6rem;
+      font-family: var(--mono);
+    }
+
+    /* =========================================
+       MAIN CARD
+    ========================================= */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 680px;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+      box-shadow: 0 0 0 1px rgba(56,189,248,0.04),
+                  0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    /* =========================================
+       INPUT AREA
+    ========================================= */
+    .input-label {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    .input-wrap {
+      display: flex;
+      gap: 0.6rem;
+      align-items: stretch;
+    }
+
+    .url-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1.1rem;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.88rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .url-input::placeholder { color: var(--text-muted); }
+
+    .url-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56,189,248,0.12);
+    }
+
+    .btn-scan {
+      background: var(--accent);
+      color: #0b0f1a;
+      border: none;
+      border-radius: 10px;
+      padding: 0 1.4rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+
+    .btn-scan:hover {
+      opacity: 0.88;
+      transform: translateY(-1px);
+      box-shadow: 0 0 20px rgba(56,189,248,0.35);
+    }
+
+    .btn-scan:active { transform: translateY(0); }
+
+    .btn-scan:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* =========================================
+       SAMPLE URLS
+    ========================================= */
+    .samples {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .samples-label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-right: 0.2rem;
+    }
+
+    .sample-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .sample-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* =========================================
+       DIVIDER
+    ========================================= */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 1.8rem 0;
+    }
+
+    /* =========================================
+       LOADING SPINNER
+    ========================================= */
+    .loader {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.5rem 0;
+    }
+
+    .loader.active { display: flex; }
+
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      animation: blink 1.2s steps(1) infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* =========================================
+       RESULT BLOCK
+    ========================================= */
+    .result {
+      display: none;
+      animation: fadeUp 0.4s ease;
+    }
+
+    .result.active { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Verdict banner */
+    .verdict {
+      border-radius: 10px;
+      padding: 1.2rem 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .verdict.safe    { background: var(--safe-bg);   border: 1px solid rgba(34,197,94,0.25); }
+    .verdict.warn    { background: var(--warn-bg);   border: 1px solid rgba(245,158,11,0.25); }
+    .verdict.danger  { background: var(--danger-bg); border: 1px solid rgba(239,68,68,0.25); }
+
+    .verdict-icon {
+      font-size: 2rem;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .verdict-info { flex: 1; }
+
+    .verdict-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .verdict.safe    .verdict-title { color: var(--safe); }
+    .verdict.warn    .verdict-title { color: var(--warn); }
+    .verdict.danger  .verdict-title { color: var(--danger); }
+
+    .verdict-url {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      word-break: break-all;
+    }
+
+    /* Score bar */
+    .score-section {
+      margin-bottom: 1.2rem;
+    }
+
+    .score-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .score-label {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .score-value {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .score-bar-track {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.8s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    /* Reasons list */
+    .reasons-label {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+    }
+
+    .reasons-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .reason-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem 0.85rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+    }
+
+    .reason-icon { flex-shrink: 0; font-size: 0.9rem; }
+
+    .reason-item.flag    { border-left: 2px solid var(--danger); }
+    .reason-item.warning { border-left: 2px solid var(--warn); }
+    .reason-item.ok      { border-left: 2px solid var(--safe); }
+
+    /* Copy button */
+    .btn-copy {
+      margin-top: 1.1rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn-copy:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* =========================================
+       HISTORY SECTION
+    ========================================= */
+    .history-section {
+      width: 100%;
+      max-width: 680px;
+      position: relative;
+      z-index: 1;
+      margin-top: 1.8rem;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.8rem;
+    }
+
+    .history-title {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .btn-clear {
+      background: none;
+      border: none;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      transition: color 0.2s;
+    }
+
+    .btn-clear:hover { color: var(--danger); }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .history-item:hover {
+      border-color: var(--accent);
+      transform: translateX(3px);
+    }
+
+    .history-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .history-dot.safe   { background: var(--safe);   box-shadow: 0 0 6px var(--safe); }
+    .history-dot.warn   { background: var(--warn);   box-shadow: 0 0 6px var(--warn); }
+    .history-dot.danger { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+    .history-url {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-score {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    /* =========================================
+       TOOLTIP (title attribute is enough)
+       Extra tooltips via data-tip
+    ========================================= */
+    [data-tip] { position: relative; }
+
+    [data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%; transform: translateX(-50%);
+      background: #1e293b;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    /* =========================================
+       RESPONSIVE
+    ========================================= */
+    @media (max-width: 520px) {
+      .input-wrap { flex-direction: column; }
+      .btn-scan   { padding: 0.85rem; }
+      .card       { padding: 1.4rem 1.2rem; }
+    }
+
+    /* =========================================
+       EMPTY STATE
+    ========================================= */
+    .empty-state {
+      text-align: center;
+      padding: 2rem 0 0.5rem;
+    }
+
+    .empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      opacity: 0.3;
+    }
+
+    .empty-text {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-badge">PhishGuard v1.0</div>
+    <h1>URL Safety Detector</h1>
+    <p class="subtitle">// paste any link to analyze for phishing signals</p>
+  </header>
+
+  <!-- MAIN CARD -->
+  <div class="card">
+
+    <!-- Input -->
+    <label class="input-label" for="urlInput">Enter URL to scan</label>
+    <div class="input-wrap">
+      <input
+        class="url-input"
+        id="urlInput"
+        type="text"
+        placeholder="https://example.com/login?token=abc123"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="btn-scan" id="btnScan" onclick="scanURL()">Scan →</button>
+    </div>
+
+    <!-- Sample URLs -->
+    <div class="samples">
+      <span class="samples-label">Try:</span>
+      <span class="sample-chip" onclick="loadSample('https://www.google.com')">google.com</span>
+      <span class="sample-chip" onclick="loadSample('http://192.168.1.1/bank-login/verify?update=true')">IP phish</span>
+      <span class="sample-chip" onclick="loadSample('https://paypa1-secure.verify-account.com/login')">spoof domain</span>
+      <span class="sample-chip" onclick="loadSample('http://free-prize-winner.click/claim@user//now!!')">suspicious</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Loader -->
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <span class="loader-text">Analyzing URL…</span>
+    </div>
+
+    <!-- Result -->
+    <div class="result" id="result">
+
+      <!-- Verdict banner -->
+      <div class="verdict" id="verdictBanner">
+        <div class="verdict-icon" id="verdictIcon"></div>
+        <div class="verdict-info">
+          <div class="verdict-title" id="verdictTitle"></div>
+          <div class="verdict-url"  id="verdictUrl"></div>
+        </div>
+      </div>
+
+      <!-- Score bar -->
+      <div class="score-section">
+        <div class="score-header">
+          <span class="score-label"
+                data-tip="0 = clean, 100 = high phishing risk">Risk Score</span>
+          <span class="score-value" id="scoreValue"></span>
+        </div>
+        <div class="score-bar-track">
+          <div class="score-bar-fill" id="scoreBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Reasons -->
+      <div class="reasons-label">Detection Findings</div>
+      <ul class="reasons-list" id="reasonsList"></ul>
+
+      <!-- Copy button -->
+      <button class="btn-copy" onclick="copyResult()">
+        📋 Copy Result
+      </button>
+
+    </div>
+
+    <!-- Empty state (before first scan) -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🛡️</div>
+      <div class="empty-text">No scan yet — enter a URL above</div>
+    </div>
+
+  </div>
+
+  <!-- HISTORY -->
+  <div class="history-section" id="historySection" style="display:none">
+    <div class="history-header">
+      <span class="history-title">Scan History</span>
+      <button class="btn-clear" onclick="clearHistory()">Clear</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+
+
+  <!-- ==========================================
+       JAVASCRIPT — Detection Engine + UI Logic
+  =========================================== -->
+  <script>
+    /* ------------------------------------------------
+       DETECTION ENGINE
+       Returns { score, verdict, reasons }
+       score:   0–100  (higher = more risky)
+       verdict: 'safe' | 'warn' | 'danger'
+    ------------------------------------------------ */
+    function analyzeURL(rawURL) {
+      const reasons = [];  // { type: 'flag'|'warning'|'ok', icon, text }
+      let score = 0;
+
+      // --- Normalize: add https:// if missing for parsing ---
+      let url;
+      let normalizedURL = rawURL.trim();
+      if (!/^https?:\/\//i.test(normalizedURL)) {
+        normalizedURL = 'https://' + normalizedURL;
+      }
+
+      try {
+        url = new URL(normalizedURL);
+      } catch {
+        return {
+          score: 90,
+          verdict: 'danger',
+          reasons: [{ type: 'flag', icon: '❌', text: 'Invalid or malformed URL — cannot be parsed.' }]
+        };
+      }
+
+      const fullURL   = rawURL;
+      const hostname  = url.hostname.toLowerCase();
+      const pathname  = url.pathname;
+      const search    = url.search;
+      const protocol  = url.protocol;
+      const full      = (hostname + pathname + search).toLowerCase();
+
+      // ── CHECK 1: HTTPS ──────────────────────────────────
+      if (protocol === 'https:') {
+        reasons.push({ type: 'ok', icon: '🔒', text: 'HTTPS is used — connection is encrypted.' });
+      } else {
+        score += 20;
+        reasons.push({ type: 'flag', icon: '🔓', text: 'No HTTPS — data transmitted without encryption. High risk.' });
+      }
+
+      // ── CHECK 2: IP address instead of domain ───────────
+      const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (ipv4Regex.test(hostname)) {
+        score += 30;
+        reasons.push({ type: 'flag', icon: '🚨', text: `IP address used as host (${hostname}) — legitimate sites use domain names.` });
+      } else {
+        reasons.push({ type: 'ok', icon: '🌐', text: 'Domain name used (not raw IP address).' });
+      }
+
+      // ── CHECK 3: Suspicious keywords in URL ─────────────
+      const suspiciousKeywords = [
+        'login', 'signin', 'verify', 'update', 'secure', 'account',
+        'bank', 'paypal', 'password', 'confirm', 'credential',
+        'wallet', 'unlock', 'support', 'helpdesk', 'webscr', 'ebayisapi'
+      ];
+      const foundKeywords = suspiciousKeywords.filter(kw => full.includes(kw));
+
+      if (foundKeywords.length >= 3) {
+        score += 25;
+        reasons.push({ type: 'flag', icon: '🎣', text: `Multiple phishing keywords found: ${foundKeywords.join(', ')}` });
+      } else if (foundKeywords.length > 0) {
+        score += 10;
+        reasons.push({ type: 'warning', icon: '⚠️', text: `Sensitive keyword(s) in URL: ${foundKeywords.join(', ')}` });
+      } else {
+        reasons.push({ type: 'ok', icon: '✅', text: 'No suspicious phishing keywords detected.' });
+      }
+
+      // ── CHECK 4: URL length ──────────────────────────────
+      const urlLen = fullURL.length;
+      if (urlLen > 100) {
+        score += 15;
+        reasons.push({ type: 'flag', icon: '📏', text: `URL is very long (${urlLen} chars). Phishing URLs often hide malicious paths in long strings.` });
+      } else if (urlLen > 60) {
+        score += 5;
+        reasons.push({ type: 'warning', icon: '📏', text: `URL is moderately long (${urlLen} chars). Slightly elevated risk.` });
+      } else {
+        reasons.push({ type: 'ok', icon: '✅', text: `URL length is normal (${urlLen} chars).` });
+      }
+
+      // ── CHECK 5: Special characters ─────────────────────
+      const atCount     = (fullURL.match(/@/g) || []).length;
+      const dashCount   = (hostname.match(/-/g) || []).length;
+      const doubleslash = (fullURL.match(/\/\//g) || []).length - 1; // subtract the protocol one
+      const dotCount    = (hostname.match(/\./g) || []).length;
+
+      if (atCount > 0) {
+        score += 20;
+        reasons.push({ type: 'flag', icon: '🚩', text: `"@" symbol found in URL. Browsers ignore everything before @ — classic phishing trick.` });
+      }
+
+      if (dashCount >= 3) {
+        score += 15;
+        reasons.push({ type: 'flag', icon: '🚩', text: `Too many hyphens in domain (${dashCount}). Often used to fake legitimate domains.` });
+      } else if (dashCount >= 1) {
+        score += 5;
+        reasons.push({ type: 'warning', icon: '⚠️', text: `Hyphen(s) in domain name — slightly suspicious depending on context.` });
+      }
+
+      if (doubleslash > 0) {
+        score += 10;
+        reasons.push({ type: 'warning', icon: '⚠️', text: `Extra "//" found in URL path — may indicate URL manipulation.` });
+      }
+
+      if (dotCount >= 4) {
+        score += 15;
+        reasons.push({ type: 'flag', icon: '🚩', text: `Excessive subdomain depth (${dotCount} dots). Phishers use deep subdomains to look legitimate.` });
+      } else if (dotCount === 3) {
+        score += 5;
+        reasons.push({ type: 'warning', icon: '⚠️', text: `Three-level domain detected — verify the root domain is legitimate.` });
+      }
+
+      // ── CHECK 6: Known brand spoofing ───────────────────
+      const brands = ['paypal', 'apple', 'amazon', 'microsoft', 'google', 'facebook',
+                      'netflix', 'instagram', 'twitter', 'linkedin', 'wellsfargo',
+                      'chase', 'bankofamerica', 'irs', 'fedex', 'dhl', 'ups'];
+      const domainParts = hostname.replace(/^www\./, '').split('.');
+      const rootDomain  = domainParts.slice(-2).join('.');
+
+      for (const brand of brands) {
+        // If brand name is in URL but NOT the root domain's core name
+        if (full.includes(brand) && !rootDomain.startsWith(brand)) {
+          score += 25;
+          reasons.push({ type: 'flag', icon: '🎭', text: `Brand name "${brand}" appears in URL but doesn't match root domain — possible impersonation.` });
+          break;
+        }
+      }
+
+      // ── CHECK 7: Suspicious TLDs ────────────────────────
+      const suspiciousTLDs = ['.tk', '.ml', '.ga', '.cf', '.gq', '.click', '.xyz',
+                               '.top', '.loan', '.win', '.work', '.download', '.link'];
+      const tld = '.' + domainParts[domainParts.length - 1];
+      if (suspiciousTLDs.includes(tld)) {
+        score += 15;
+        reasons.push({ type: 'flag', icon: '🌍', text: `TLD "${tld}" is frequently used by phishing sites due to low cost / free registration.` });
+      }
+
+      // ── CHECK 8: Query string depth ─────────────────────
+      const queryParams = [...new URLSearchParams(search).entries()];
+      if (queryParams.length > 5) {
+        score += 10;
+        reasons.push({ type: 'warning', icon: '🔍', text: `${queryParams.length} query parameters detected — unusually complex URL structure.` });
+      }
+
+      // ── Cap score at 100 ────────────────────────────────
+      score = Math.min(score, 100);
+
+      // ── Verdict ─────────────────────────────────────────
+      let verdict;
+      if      (score <= 20)  verdict = 'safe';
+      else if (score <= 50)  verdict = 'warn';
+      else                   verdict = 'danger';
+
+      return { score, verdict, reasons };
+    }
+
+
+    /* ------------------------------------------------
+       HISTORY (in-memory array)
+    ------------------------------------------------ */
+    const history = [];
+
+    function addHistory(url, verdict, score) {
+      history.unshift({ url, verdict, score });
+      if (history.length > 10) history.pop();
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const section = document.getElementById('historySection');
+      const list    = document.getElementById('historyList');
+
+      if (history.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      section.style.display = 'block';
+      list.innerHTML = history.map(item => `
+        <div class="history-item" onclick="loadSample('${escapeHtml(item.url)}')">
+          <div class="history-dot ${item.verdict}"></div>
+          <span class="history-url">${escapeHtml(item.url)}</span>
+          <span class="history-score">${item.score}/100</span>
+        </div>
+      `).join('');
+    }
+
+    function clearHistory() {
+      history.length = 0;
+      renderHistory();
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+
+    /* ------------------------------------------------
+       SCAN FUNCTION (with simulated async delay)
+    ------------------------------------------------ */
+    function scanURL() {
+      const input    = document.getElementById('urlInput');
+      const rawURL   = input.value.trim();
+
+      if (!rawURL) {
+        input.focus();
+        input.style.borderColor = 'var(--danger)';
+        setTimeout(() => input.style.borderColor = '', 1000);
+        return;
+      }
+
+      // Show loader, hide result/empty state
+      const loader     = document.getElementById('loader');
+      const result     = document.getElementById('result');
+      const emptyState = document.getElementById('emptyState');
+      const btnScan    = document.getElementById('btnScan');
+
+      emptyState.style.display = 'none';
+      result.classList.remove('active');
+      loader.classList.add('active');
+      btnScan.disabled = true;
+
+      // Simulate async analysis (real-world: would call a backend)
+      setTimeout(() => {
+        const { score, verdict, reasons } = analyzeURL(rawURL);
+
+        loader.classList.remove('active');
+        renderResult(rawURL, score, verdict, reasons);
+        addHistory(rawURL, verdict, score);
+        btnScan.disabled = false;
+      }, 1100);
+    }
+
+
+    /* ------------------------------------------------
+       RENDER RESULT
+    ------------------------------------------------ */
+    const VERDICT_MAP = {
+      safe:   { icon: '✅', label: 'Safe',      cls: 'safe',   color: 'var(--safe)'   },
+      warn:   { icon: '⚠️', label: 'Suspicious', cls: 'warn',   color: 'var(--warn)'   },
+      danger: { icon: '❌', label: 'Phishing',   cls: 'danger', color: 'var(--danger)' },
+    };
+
+    function renderResult(url, score, verdict, reasons) {
+      const v = VERDICT_MAP[verdict];
+
+      // Banner
+      const banner = document.getElementById('verdictBanner');
+      banner.className = `verdict ${v.cls}`;
+      document.getElementById('verdictIcon').textContent  = v.icon;
+      document.getElementById('verdictTitle').textContent = v.label;
+      document.getElementById('verdictUrl').textContent   = url;
+
+      // Score bar
+      document.getElementById('scoreValue').textContent = `${score} / 100`;
+      document.getElementById('scoreValue').style.color = v.color;
+      const bar = document.getElementById('scoreBar');
+      bar.style.width      = '0%';
+      bar.style.background = v.color;
+      bar.style.boxShadow  = `0 0 12px ${v.color}`;
+      // Trigger animation
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { bar.style.width = score + '%'; });
+      });
+
+      // Reasons
+      const list = document.getElementById('reasonsList');
+      list.innerHTML = reasons.map(r => `
+        <li class="reason-item ${r.type}">
+          <span class="reason-icon">${r.icon}</span>
+          <span>${r.text}</span>
+        </li>
+      `).join('');
+
+      // Store for copy
+      document.getElementById('result').dataset.url     = url;
+      document.getElementById('result').dataset.score   = score;
+      document.getElementById('result').dataset.verdict = verdict;
+      document.getElementById('result').dataset.reasons = reasons.map(r => `${r.icon} ${r.text}`).join('\n');
+
+      document.getElementById('result').classList.add('active');
+    }
+
+
+    /* ------------------------------------------------
+       COPY RESULT
+    ------------------------------------------------ */
+    function copyResult() {
+      const el = document.getElementById('result');
+      const v  = VERDICT_MAP[el.dataset.verdict];
+      const text = [
+        `PhishGuard Scan Result`,
+        `URL: ${el.dataset.url}`,
+        `Verdict: ${v.label}`,
+        `Risk Score: ${el.dataset.score}/100`,
+        ``,
+        `Findings:`,
+        el.dataset.reasons
+      ].join('\n');
+
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.btn-copy');
+        btn.textContent = '✅ Copied!';
+        setTimeout(() => btn.innerHTML = '📋 Copy Result', 2000);
+      });
+    }
+
+
+    /* ------------------------------------------------
+       LOAD SAMPLE URL
+    ------------------------------------------------ */
+    function loadSample(url) {
+      document.getElementById('urlInput').value = url;
+      scanURL();
+    }
+
+
+    /* ------------------------------------------------
+       ENTER KEY SUPPORT
+    ------------------------------------------------ */
+    document.getElementById('urlInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') scanURL();
+    });
+  </script>
+</body>
+</html>
